@@ -1,5 +1,6 @@
 package com.lbs.server.conversation
 
+import com.lbs.bot.Bot
 import com.lbs.bot.model.{Command, MessageSource}
 import com.lbs.server.conversation.Login.{LoggedIn, UserId}
 import com.lbs.server.conversation.base.Conversation
@@ -16,7 +17,9 @@ class Auth(
   dataService: DataService,
   unauthorizedHelpFactory: MessageSourceTo[UnauthorizedHelp],
   loginFactory: MessageSourceWithOriginatorTo[Login],
-  chatFactory: UserIdTo[Chat]
+  chatFactory: UserIdTo[Chat],
+  bot: Bot,
+  allowedUserIds: Set[String]
 )(val actorSystem: ActorSystem)
     extends Conversation[Unit]
     with StrictLogging {
@@ -31,6 +34,9 @@ class Auth(
 
   private def processIncoming =
     monologue {
+      case Msg(_: Command, _) if !isAuthorized =>
+        bot.sendMessage(source, "⛔ You are not authorized to use this bot.")
+        stay()
       case Msg(cmd @ TextCommand("/help"), _) if userId.isEmpty =>
         unauthorizedHelp ! cmd
         stay()
@@ -72,6 +78,9 @@ class Auth(
       } else chat
     }
   }
+
+  private def isAuthorized: Boolean =
+    allowedUserIds.isEmpty || allowedUserIds.contains(source.chatId)
 
   def getUserId: Option[UserId] = {
     val userIdMaybe = dataService.findUserAndAccountIdBySource(source)

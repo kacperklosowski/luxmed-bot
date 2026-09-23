@@ -31,3 +31,4 @@ logging:
 
 security.secret: ${SECURITY_SECRET:random_secret_hfjdsk72euhdsbcgg6}
 telegram.token: ${TELEGRAM_TOKEN}
+allowed.telegram.user.ids: ${ALLOWED_TELEGRAM_USER_IDS:}

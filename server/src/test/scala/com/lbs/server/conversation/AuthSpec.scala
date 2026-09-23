@@ -1,5 +1,6 @@
 package com.lbs.server.conversation
 
+import com.lbs.bot.Bot
 import com.lbs.bot.model.{Command, Message, MessageSource, TelegramMessageSourceSystem}
 import com.lbs.server.conversation.Login.{ForwardCommand, LoggedIn, UserId}
 import com.lbs.server.conversation.base.ConversationTestProbe
@@ -23,7 +24,11 @@ class AuthSpec extends AkkaTestKit {
       val chatActorFactory: UserIdTo[Chat] = _ => chatActor.conversation
       val dataService = mock(classOf[DataService])
       when(dataService.findUserAndAccountIdBySource(source)).thenReturn(None)
-      val auth = new Auth(source, dataService, unauthorizedHelpFactory, loginActorFactory, chatActorFactory)(system)
+      val bot = mock(classOf[Bot])
+      val auth =
+        new Auth(source, dataService, unauthorizedHelpFactory, loginActorFactory, chatActorFactory, bot, Set.empty)(
+          system
+        )
 
       "send english help on /start command" in {
         val cmd = Command(source, Message("1", Some("/start")))
@@ -77,8 +82,12 @@ class AuthSpec extends AkkaTestKit {
       val chatActorFactory: UserIdTo[Chat] = _ => chatActor.conversation
       val dataService = mock(classOf[DataService])
       when(dataService.findUserAndAccountIdBySource(source)).thenReturn(Some(userId.userId, "", userId.accountId))
+      val bot = mock(classOf[Bot])
 
-      val auth = new Auth(source, dataService, unauthorizedHelpFactory, loginActorFactory, chatActorFactory)(system)
+      val auth =
+        new Auth(source, dataService, unauthorizedHelpFactory, loginActorFactory, chatActorFactory, bot, Set.empty)(
+          system
+        )
 
       "forward all commands to chat actor" in {
         val cmd = Command(source, Message("1", Some("any")))
@@ -101,6 +110,40 @@ class AuthSpec extends AkkaTestKit {
         loginActor.expectMsg(cmd1)
         auth ! cmd2
         loginActor.expectMsg(cmd2)
+      }
+    }
+
+    "user is not in the allowed list" must {
+      val unauthorizedHelpActor = ConversationTestProbe[UnauthorizedHelp]()
+      val loginActor = ConversationTestProbe[Login]()
+      val chatActor = ConversationTestProbe[Chat]()
+      val unauthorizedHelpFactory: MessageSourceTo[UnauthorizedHelp] = _ => unauthorizedHelpActor.conversation
+      val loginActorFactory: MessageSourceWithOriginatorTo[Login] = (_, _) => loginActor.conversation
+      val chatActorFactory: UserIdTo[Chat] = _ => chatActor.conversation
+      val dataService = mock(classOf[DataService])
+      when(dataService.findUserAndAccountIdBySource(source)).thenReturn(None)
+      val bot = mock(classOf[Bot])
+
+      val auth =
+        new Auth(source, dataService, unauthorizedHelpFactory, loginActorFactory, chatActorFactory, bot, Set("999"))(
+          system
+        )
+
+      "reject /start, /help, /login and any other command without dispatching them" in {
+        val startCmd = Command(source, Message("1", Some("/start")))
+        val helpCmd = Command(source, Message("2", Some("/help")))
+        val loginCmd = Command(source, Message("3", Some("/login")))
+        val anyCmd = Command(source, Message("4", Some("any")))
+
+        auth ! startCmd
+        auth ! helpCmd
+        auth ! loginCmd
+        auth ! anyCmd
+
+        unauthorizedHelpActor.expectNoMessage()
+        loginActor.expectNoMessage()
+        chatActor.expectNoMessage()
+        verify(bot, Mockito.times(4)).sendMessage(source, "⛔ You are not authorized to use this bot.")
       }
     }
   }

@@ -22,6 +22,9 @@ class BootConfig {
   @Value("${telegram.token}")
   private var telegramBotToken: String = uninitialized
 
+  @Value("${allowed.telegram.user.ids}")
+  private var allowedTelegramUserIdsRaw: String = uninitialized
+
   @Autowired
   private var apiService: ApiService = uninitialized
 
@@ -46,7 +49,9 @@ class BootConfig {
 
   @Bean
   def authFactory: MessageSourceTo[Auth] = source =>
-    new Auth(source, dataService, unauthorizedHelpFactory, loginFactory, chatFactory)(actorSystem)
+    new Auth(source, dataService, unauthorizedHelpFactory, loginFactory, chatFactory, bot, allowedTelegramUserIds)(
+      actorSystem
+    )
 
   @Bean
   def loginFactory: MessageSourceWithOriginatorTo[Login] = (source, originator) =>
@@ -287,4 +292,7 @@ class BootConfig {
   private def lang(userId: Login.UserId) = {
     localization.lang(userId.userId)
   }
+
+  private def allowedTelegramUserIds: Set[String] =
+    allowedTelegramUserIdsRaw.split(",").map(_.trim).filter(_.nonEmpty).toSet
 }
